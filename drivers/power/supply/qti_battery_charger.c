@@ -23,6 +23,7 @@
 #include <linux/soc/qcom/pmic_glink.h>
 #include <linux/soc/qcom/battery_charger.h>
 #include <linux/soc/qcom/panel_event_notifier.h>
+#include "qti_battery_charger.h"
 
 #define MSG_OWNER_BC			32778
 #define MSG_TYPE_REQ_RESP		1
@@ -178,6 +179,8 @@ enum xm_property_id {
 	XM_PROP_CHIP_OK,
 	XM_PROP_VBUS_DISABLE,
 	XM_PROP_REAL_TYPE,
+	XM_PROP_THERMAL_BOARD_TEMP,
+	XM_PROP_NTC_ALARM,
 	/*used for pd authentic*/
 	XM_PROP_VERIFY_PROCESS,
 	XM_PROP_VDM_CMD_CHARGER_VERSION,
@@ -213,6 +216,8 @@ enum xm_property_id {
 	XM_PROP_INPUT_SUSPEND,
 	XM_PROP_FASTCHGMODE,
 	XM_PROP_NIGHT_CHARGING,
+	XM_PROP_BLANK_STATUS,
+	XM_PROP_SCREEN_CCTOG,
 	XM_PROP_SOC_DECIMAL,
 	XM_PROP_SOC_DECIMAL_RATE,
 	XM_PROP_QUICK_CHARGE_TYPE,
@@ -249,6 +254,16 @@ enum xm_property_id {
 	XM_PROP_RX_SS,
 	XM_PROP_RX_OFFSET,
 	XM_PROP_TX_Q,
+	/* Xiaomeme useless props start */
+	XM_PROP_PEN_MACL,
+	XM_PROP_PEN_MACH,
+	XM_PROP_TX_IOUT,
+	XM_PROP_TX_VOUT,
+	XM_PROP_PEN_SOC,
+	XM_PROP_PEN_HALL3,
+	XM_PROP_PEN_HALL4,
+	XM_PROP_FAKE_SS,
+	/* Xiaomeme useless props end */
 	XM_PROP_WLS_END = 88,
 	/**********************/
 	XM_PROP_SHUTDOWN_DELAY,
@@ -321,7 +336,54 @@ enum xm_property_id {
 	XM_PROP_FG1_SEAL_STATE,
 	XM_PROP_FG1_DF_CHECK,
 	/*end dual fuel high temperature intercept feature*/
+	/* Start Xiaomeme useless props */
+	XM_PROP_SLAVE_CHIP_OK,
+	XM_PROP_SLAVE_AUTHENTIC,
+	XM_PROP_FG2_RM,
+	XM_PROP_FG2_FCC,
+	XM_PROP_FG2_SOH,
+	XM_PROP_FG2_CURRENT_MAX,
+	XM_PROP_FG2_VOL_MAX,
+	XM_PROP_FG2_RSOC,
+	XM_PROP_FG1_IBATT,
+	XM_PROP_FG2_IBATT,
+	XM_PROP_FG1_TEMP,
+	XM_PROP_FG2_TEMP,
+	XM_PROP_FG1_VOL,
+	XM_PROP_FG2_VOL,
+	XM_PROP_FG2_AI,
+	XM_PROP_FG2_TREMQ,
+	XM_PROP_FG2_TFULLCHGQ,
+	XM_PROP_FG1_FullChargeFlag,
+	XM_PROP_FG2_FullChargeFlag,
+	XM_PROP_FG1_SOC,
+	XM_PROP_FG2_SOC,
+	XM_PROP_FG2_OVER_PEAK_FLAG,
+	XM_PROP_FG2_CURRENT_DEVIATION,
+	XM_PROP_FG2_POWER_DEVIATION,
+	XM_PROP_FG2_AVERAGE_CURRENT,
+	XM_PROP_FG2_AVERAGE_TEMPERATURE,
+	XM_PROP_FG2_START_LEARNING,
+	XM_PROP_FG2_STOP_LEARNING,
+	XM_PROP_FG2_SET_LEARNING_POWER,
+	XM_PROP_FG2_GET_LEARNING_POWER,
+	XM_PROP_FG2_GET_LEARNING_POWER_DEV,
+	XM_PROP_FG2_GET_LEARNING_TIME_DEV,
+	XM_PROP_FG2_SET_CONSTANT_POWER,
+	XM_PROP_FG2_GET_REMAINING_TIME,
+	XM_PROP_FG2_SET_REFERANCE_POWER,
+	XM_PROP_FG2_GET_REFERANCE_CURRENT,
+	XM_PROP_FG2_GET_REFERANCE_POWER,
+	XM_PROP_FG2_START_LEARNING_B,
+	XM_PROP_FG2_STOP_LEARNING_B,
+	XM_PROP_FG2_SET_LEARNING_POWER_B,
+	XM_PROP_FG2_GET_LEARNING_POWER_B,
+	XM_PROP_FG2_GET_LEARNING_POWER_DEV_B,
+	XM_PROP_FG1_GET_DESIGN_CAPACITY,
+	XM_PROP_FG2_GET_DESIGN_CAPACITY,
+	/* End Xiaomeme useless props */
 	XM_PROP_FG_VENDOR_ID,
+	XM_PROP_HAS_DP, /* Another Xiaomeme useless prop */
 	XM_PROP_DAM_OVPGATE,
 	XM_PROP_LAST_NODE,
 	XM_PROP_MAX,
@@ -539,7 +601,32 @@ struct battery_chg_dev {
 	/*shutdown delay is supported, dtsi config*/
 	bool			shutdown_delay_en;
 	bool			report_power_absent;
+	int				thermal_board_temp; /* board temp from thermal*/
+	struct notifier_block chg_nb; /* charger notifier */
 };
+
+/*thermal_board_temp start*/
+BLOCKING_NOTIFIER_HEAD(charger_notifier);
+EXPORT_SYMBOL_GPL(charger_notifier);
+
+int charger_reg_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&charger_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(charger_reg_notifier);
+
+int charger_unreg_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&charger_notifier, nb);
+}
+EXPORT_SYMBOL_GPL(charger_unreg_notifier);
+
+int charger_notifier_call_chain(unsigned long event, int val)
+{
+	return blocking_notifier_call_chain(&charger_notifier, event, &val);
+}
+EXPORT_SYMBOL_GPL(charger_notifier_call_chain);
+/*thermal_board_temp end*/
 
 static const int battery_prop_map[BATT_PROP_MAX] = {
 	[BATT_STATUS]		= POWER_SUPPLY_PROP_STATUS,
@@ -3458,6 +3545,44 @@ static ssize_t plate_shock_show(struct class *c,
 }
 static CLASS_ATTR_RW(plate_shock);
 
+static ssize_t thermal_board_temp_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+	int val;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	rc = write_property_id(bcdev, pst, XM_PROP_THERMAL_BOARD_TEMP, val);
+
+	if (rc < 0)
+		return rc;
+
+	return count;
+}
+
+static ssize_t thermal_board_temp_show(struct class *c,
+					struct class_attribute *attr, char *buf)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+
+	rc = read_property_id(bcdev, pst, XM_PROP_THERMAL_BOARD_TEMP);
+	if (rc < 0)
+		return rc;
+
+        return scnprintf(buf, PAGE_SIZE, "%u", bcdev->thermal_board_temp);
+	// return scnprintf(buf, PAGE_SIZE, "%u", pst->prop[XM_PROP_THERMAL_BOARD_TEMP]);
+}
+static CLASS_ATTR_RW(thermal_board_temp);
+
 static ssize_t shutdown_delay_show(struct class *c,
 					struct class_attribute *attr, char *buf)
 {
@@ -5210,6 +5335,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_night_charging.attr,
 	&class_attr_connector_temp.attr,
 	&class_attr_real_type.attr,
+	&class_attr_thermal_board_temp.attr,
 	&class_attr_battcont_online.attr,
 	&class_attr_request_vdm_cmd.attr,
 	&class_attr_current_state.attr,
@@ -5688,6 +5814,38 @@ static struct device_type dev_type_xiaomi_uevent = {
 	.uevent = add_xiaomi_uevent,
 };
 
+static int charger_notifier_event(struct notifier_block *notifier,
+			unsigned long chg_event, void *val)
+{
+	struct battery_chg_dev *bcdev;
+        struct power_supply	*batt_psy;
+        int rc = 0;
+
+	batt_psy = power_supply_get_by_name("battery");
+	if (!batt_psy) {
+		pr_err("Failed to get battery supply\n");
+		return -EPROBE_DEFER;
+	}
+
+        bcdev = power_supply_get_drvdata(batt_psy);
+	if (!bcdev)
+		return -ENODEV;
+
+	switch (chg_event) {
+	case THERMAL_BOARD_TEMP:
+		bcdev->thermal_board_temp = *(int *)val;
+		pr_err("%s: get thermal_board_temp: %d\n", __func__, bcdev->thermal_board_temp);
+                rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_XM], XM_PROP_THERMAL_BOARD_TEMP, bcdev->thermal_board_temp);
+                if (rc < 0)
+                        return rc;
+		break;
+	default:
+		pr_err("%s: not supported charger notifier event: %d\n", __func__, chg_event);
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
 static int battery_chg_probe(struct platform_device *pdev)
 {
 	struct battery_chg_dev *bcdev;
@@ -5840,6 +5998,8 @@ static int battery_chg_probe(struct platform_device *pdev)
 	bcdev->battery_auth = false;
 	bcdev->slave_fg_verify_flag = false;
 	bcdev->mtbf_current = 0;
+	bcdev->chg_nb.notifier_call = charger_notifier_event;
+	charger_reg_notifier(&bcdev->chg_nb);
 	dev_err(dev, "battery_chg probe done %d\n");
 
 	return 0;
